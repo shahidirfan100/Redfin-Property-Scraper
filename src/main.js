@@ -65,6 +65,44 @@ const cleanHtml = (html) => {
     return $.root().text().replace(/\s+/g, ' ').trim();
 };
 
+const ensureAbsoluteUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith('http')) return url;
+    return `${REDFIN_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
+};
+
+const extractByLabel = ($, labels) => {
+    const normalized = labels.map((l) => l.toLowerCase());
+
+    const dlRows = $('dl').find('dt, dd');
+    for (let i = 0; i < dlRows.length; i += 2) {
+        const label = cleanText($(dlRows[i]).text())?.toLowerCase();
+        const value = cleanText($(dlRows[i + 1]).text());
+        if (label && normalized.some((l) => label.includes(l))) return value;
+    }
+
+    const tableRows = $('tr');
+    for (const row of tableRows) {
+        const cells = $(row).find('td, th');
+        if (cells.length < 2) continue;
+        const label = cleanText($(cells[0]).text())?.toLowerCase();
+        const value = cleanText($(cells[1]).text());
+        if (label && normalized.some((l) => label.includes(l))) return value;
+    }
+
+    const listItems = $('li');
+    for (const li of listItems) {
+        const text = cleanText($(li).text());
+        if (!text) continue;
+        const lower = text.toLowerCase();
+        const match = normalized.find((l) => lower.startsWith(`${l}:`) || lower.includes(`${l} `));
+        if (match) {
+            return cleanText(text.split(':').slice(1).join(':')) || text;
+        }
+    }
+    return null;
+};
+
 const extractRegionIdFromUrl = (url) => {
     try {
         const match = url.match(/\/city\/(\d+)\//);
@@ -328,21 +366,37 @@ const extractFromPageContent = async (html) => {
 const parseHtmlDetail = async (html) => {
     const $ = cheerioLoad(html);
     const jsonLdArray = extractJsonLd(html);
-    const propertyData = parsePropertyFromJsonLd(jsonLdArray);
+    const propertyData = parsePropertyFromJsonLd(jsonLdArray) || {};
+
+    const metaDescription = $('meta[name="description"]').attr('content');
+    const listingDateLabel = extractByLabel($, ['listed on', 'time on redfin', 'listed']);
+    const lotSizeLabel = extractByLabel($, ['lot size', 'lot sqft']);
+    const statusLabel = extractByLabel($, ['status']);
+    const sqftLabel = extractByLabel($, ['square feet', 'sq ft', 'sqft']);
 
     return {
-        title: propertyData?.title || $('h1').first().text().trim() || null,
-        price: propertyData?.price || $('.price-info').first().text().trim() || null,
-        beds: propertyData?.beds || $('[data-beds]').first().text().trim() || null,
-        baths: propertyData?.baths || $('[data-baths]').first().text().trim() || null,
-        sqft: propertyData?.sqft || $('[data-sqft]').first().text().trim() || null,
-        address: propertyData?.address || $('.address').first().text().trim() || null,
-        city: propertyData?.city || null,
-        state: propertyData?.state || null,
-        zip: propertyData?.zip || null,
-        description: propertyData?.description || $('.property-description').text().trim() || null,
-        latitude: propertyData?.latitude || null,
-        longitude: propertyData?.longitude || null,
+        title: propertyData.title || cleanText($('h1').first().text()) || null,
+        price: propertyData.price || cleanText($('.price-info, [data-rf-test-id="abp-price"], .statsValue').first().text()) || null,
+        beds: propertyData.beds || cleanText($('[data-beds], [data-rf-test-id="abp-beds"]').first().text()) || null,
+        baths: propertyData.baths || cleanText($('[data-baths], [data-rf-test-id="abp-baths"]').first().text()) || null,
+        sqft: propertyData.sqft || sqftLabel || cleanText($('[data-sqft], [data-rf-test-id="abp-sqft"]').first().text()) || null,
+        address: propertyData.address || cleanText($('.address, [data-rf-test-id="abp-streetLine"]').first().text()) || null,
+        city: propertyData.city || null,
+        state: propertyData.state || null,
+        zip: propertyData.zip || null,
+        description:
+            propertyData.description ||
+            cleanText(metaDescription) ||
+            cleanText($('.property-description, .remarks, [data-rf-test-id="abp-description"]').text()) ||
+            null,
+        latitude: propertyData.latitude || null,
+        longitude: propertyData.longitude || null,
+        lotSize: propertyData.lotSize || lotSizeLabel || null,
+        yearBuilt: propertyData.yearBuilt || extractByLabel($, ['year built']) || null,
+        hoa: propertyData.hoa || extractByLabel($, ['hoa dues', 'hoa fee']) || null,
+        status: propertyData.status || statusLabel || cleanText($('[data-rf-test-id="abp-status"]').first().text()) || null,
+        listingDate: propertyData.listingDate || listingDateLabel || null,
+        mlsNumber: propertyData.mlsNumber || extractByLabel($, ['mls#', 'mls number']) || null,
     };
 };
 
@@ -387,7 +441,7 @@ const fetchSitemapUrls = async ({ regionId, limit = 100, proxyConfiguration }) =
 
 const buildProperty = ({ listing, detail, source }) => {
     const propertyId = listing?.propertyId || listing?.mlsId?.value || detail?.id;
-    const url = listing?.url || detail?.url || `${REDFIN_BASE}/home/${propertyId}`;
+    const url = ensureAbsoluteUrl(listing?.url || detail?.url || (propertyId ? `${REDFIN_BASE}/home/${propertyId}` : null));
 
     const price = detail?.price || listing?.price || listing?.priceInfo?.amount;
     const beds = detail?.beds || listing?.beds;
@@ -399,7 +453,7 @@ const buildProperty = ({ listing, detail, source }) => {
     const zip = detail?.zip || listing?.zip;
 
     const fullAddress =
-        address && city && state && zip ? `${address}, ${city}, ${state} ${zip}` : address || null;
+        address && city && state ? `${address}, ${city}, ${state}${zip ? ` ${zip}` : ''}` : address || null;
 
     return {
         propertyId: propertyId || url,
@@ -414,15 +468,15 @@ const buildProperty = ({ listing, detail, source }) => {
         baths: baths ? parseFloat(baths) : null,
         sqft: sqft ? parseInt(sqft) : null,
         propertyType: listing?.propertyType || detail?.propertyType || null,
-        status: listing?.status || listing?.mlsStatus?.value || null,
-        listingDate: listing?.listingDate || null,
+        status: detail?.status || listing?.status || listing?.mlsStatus?.value || null,
+        listingDate: detail?.listingDate || listing?.listingDate || null,
         description: detail?.description || null,
         latitude: detail?.latitude || listing?.latLong?.latitude || listing?.lat || null,
         longitude: detail?.longitude || listing?.latLong?.longitude || listing?.lng || null,
-        mlsNumber: listing?.mlsNumber || listing?.mlsId?.value || null,
-        lotSize: listing?.lotSize?.amount || null,
-        yearBuilt: listing?.yearBuilt || null,
-        hoa: listing?.hoa || listing?.hoaFee || null,
+        mlsNumber: detail?.mlsNumber || listing?.mlsNumber || listing?.mlsId?.value || null,
+        lotSize: detail?.lotSize || listing?.lotSize?.amount || null,
+        yearBuilt: detail?.yearBuilt || listing?.yearBuilt || null,
+        hoa: detail?.hoa || listing?.hoa || listing?.hoaFee || null,
         source,
         fetched_at: new Date().toISOString(),
     };
