@@ -157,6 +157,15 @@ Popular US cities:
 </tbody>
 </table>
 
+### Advanced controls
+
+- `startUrls` (array) / `startUrl` / `cityUrl`: provide one or many Redfin search URLs; region ID auto-extracted.
+- `preferJson`: JSON API first (fastest); disable if your proxies are blocked.
+- `useHtmlFallback`: lightweight HTTP + Cheerio fallback when JSON fails.
+- `usePlaywright`: optional stealth browser fallback; slower but resilient—use only when API/HTML are blocked.
+- `pageSize`, `max_pages`, `maxRetries`: tune throughput vs. block risk.
+- `requestTimeoutMs`, `delayMinMs`/`delayMaxMs`: control pacing/jitter to stay stealthy.
+
 ## Output Data
 
 Each property includes:
