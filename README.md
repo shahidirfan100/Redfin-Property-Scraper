@@ -455,43 +455,6 @@ console.log(items);
 - Ignore rate limiting warnings
 - Disable proxy configuration
 
-## Technical Details
-
-### Dependencies
-
-- **Apify SDK** - Actor framework
-- **Crawlee** - Web scraping toolkit
-- **Playwright** - Browser automation (stealth mode)
-- **Cheerio** - HTML parsing
-- **Got-Scraping** - HTTP client with rotating headers
-
-### Architecture
-
-```
-Input Validation
-    ↓
-Method 1: JSON API
-    ↓ (if fails)
-Method 2: Playwright Browser
-    ↓ (if fails)
-Method 3: Sitemap URLs
-    ↓ (if fails)
-Method 4: HTML Parsing
-    ↓
-Data Deduplication
-    ↓
-Output Dataset
-```
-
-### Stealthy Mode Highlights
-
-- WebDriver property hidden
-- Plugin array spoofed
-- Chrome automation flags removed
-- Timezone matching
-- Locale matching
-- Realistic network delays
-
 ## Troubleshooting
 
 ### Debug Logging
