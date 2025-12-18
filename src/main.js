@@ -71,6 +71,16 @@ const ensureAbsoluteUrl = (url) => {
     return `${REDFIN_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
 };
 
+const unwrapValue = (value) => {
+    if (value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'value')) {
+        return value.value;
+    }
+    if (value && typeof value === 'object' && Object.prototype.hasOwnProperty.call(value, 'level')) {
+        return null;
+    }
+    return value;
+};
+
 const extractByLabel = ($, labels) => {
     const normalized = labels.map((l) => l.toLowerCase());
 
@@ -443,10 +453,10 @@ const buildProperty = ({ listing, detail, source }) => {
     const propertyId = listing?.propertyId || listing?.mlsId?.value || detail?.id;
     const url = ensureAbsoluteUrl(listing?.url || detail?.url || (propertyId ? `${REDFIN_BASE}/home/${propertyId}` : null));
 
-    const price = detail?.price || listing?.price || listing?.priceInfo?.amount;
-    const beds = detail?.beds || listing?.beds;
-    const baths = detail?.baths || listing?.baths;
-    const sqft = detail?.sqft || listing?.sqFt;
+    const price = unwrapValue(detail?.price ?? listing?.price ?? listing?.priceInfo?.amount);
+    const beds = unwrapValue(detail?.beds ?? listing?.beds);
+    const baths = unwrapValue(detail?.baths ?? listing?.baths);
+    const sqft = unwrapValue(detail?.sqft ?? listing?.sqFt);
     const address = detail?.address || listing?.streetLine?.value || listing?.address;
     const city = detail?.city || listing?.city;
     const state = detail?.state || listing?.state;
@@ -463,20 +473,33 @@ const buildProperty = ({ listing, detail, source }) => {
         city,
         state,
         zip,
-        price: price ? (typeof price === 'number' ? `$${price.toLocaleString()}` : price) : null,
-        beds: beds ? parseInt(beds) : null,
-        baths: baths ? parseFloat(baths) : null,
-        sqft: sqft ? parseInt(sqft) : null,
+        price: price ? (typeof price === 'number' ? `$${price.toLocaleString()}` : String(price)) : null,
+        beds: beds !== null && beds !== undefined ? parseInt(String(beds).replace(/[^\d]/g, ''), 10) || null : null,
+        baths: baths !== null && baths !== undefined ? parseFloat(String(baths).replace(/[^\d.]/g, '')) || null : null,
+        sqft: sqft !== null && sqft !== undefined ? parseInt(String(sqft).replace(/[^\d]/g, ''), 10) || null : null,
         propertyType: listing?.propertyType || detail?.propertyType || null,
-        status: detail?.status || listing?.status || listing?.mlsStatus?.value || null,
-        listingDate: detail?.listingDate || listing?.listingDate || null,
-        description: detail?.description || null,
-        latitude: detail?.latitude || listing?.latLong?.latitude || listing?.lat || null,
-        longitude: detail?.longitude || listing?.latLong?.longitude || listing?.lng || null,
+        status: detail?.status || listing?.status || unwrapValue(listing?.mlsStatus) || null,
+        listingDate:
+            detail?.listingDate ||
+            listing?.listingDate ||
+            (unwrapValue(listing?.dom)
+                ? new Date(Date.now() - Number(unwrapValue(listing.dom)) * 24 * 60 * 60 * 1000).toISOString().slice(0, 10)
+                : null),
+        description: detail?.description || unwrapValue(listing?.listingRemarks) || null,
+        latitude:
+            unwrapValue(detail?.latitude) ||
+            unwrapValue(listing?.latLong)?.latitude ||
+            unwrapValue(listing?.lat) ||
+            null,
+        longitude:
+            unwrapValue(detail?.longitude) ||
+            unwrapValue(listing?.latLong)?.longitude ||
+            unwrapValue(listing?.lng) ||
+            null,
         mlsNumber: detail?.mlsNumber || listing?.mlsNumber || listing?.mlsId?.value || null,
-        lotSize: detail?.lotSize || listing?.lotSize?.amount || null,
-        yearBuilt: detail?.yearBuilt || listing?.yearBuilt || null,
-        hoa: detail?.hoa || listing?.hoa || listing?.hoaFee || null,
+        lotSize: detail?.lotSize || unwrapValue(listing?.lotSize) || null,
+        yearBuilt: unwrapValue(detail?.yearBuilt) || unwrapValue(listing?.yearBuilt) || null,
+        hoa: unwrapValue(detail?.hoa) || unwrapValue(listing?.hoa) || unwrapValue(listing?.hoaFee) || null,
         source,
         fetched_at: new Date().toISOString(),
     };
@@ -565,7 +588,7 @@ try {
                         let detail = null;
 
                         if (collectDetails && listing.url) {
-                            const detailUrl = `${REDFIN_BASE}${listing.url}`;
+                            const detailUrl = ensureAbsoluteUrl(listing.url);
                             const detailRes = await gotScraping({
                                 url: detailUrl,
                                 headers: {
