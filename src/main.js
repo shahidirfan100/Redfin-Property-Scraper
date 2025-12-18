@@ -29,6 +29,11 @@ const USER_AGENTS = [
 const pickUserAgent = () => USER_AGENTS[Math.floor(Math.random() * USER_AGENTS.length)];
 const delay = (ms) => new Promise((res) => setTimeout(res, ms));
 const randBetween = (min, max) => Math.floor(Math.random() * (max - min + 1)) + min;
+const ensureAbsoluteUrl = (url) => {
+    if (!url) return null;
+    if (url.startsWith('http')) return url;
+    return `${REDFIN_BASE}${url.startsWith('/') ? '' : '/'}${url}`;
+};
 
 const buildStealthHeaders = (ua, referer = REDFIN_BASE) => ({
     'User-Agent': ua,
@@ -169,7 +174,7 @@ const parseHomesFromApi = (payload) => {
     const homes = payload?.payload?.homes || [];
     return homes.map((home) => ({
         propertyId: home.propertyId || home.mlsId?.value,
-        url: home.url ? `${REDFIN_BASE}${home.url}` : null,
+        url: ensureAbsoluteUrl(home.url),
         address: home.streetLine?.value || home.address || null,
         city: home.city,
         state: home.state,
@@ -205,7 +210,7 @@ const parseEmbeddedHomes = (html) => {
         if (Array.isArray(homes) && homes.length > 0) {
             return homes.map((home) => ({
                 propertyId: home.propertyId || home.id || home.mlsId?.value,
-                url: home.url ? (home.url.startsWith('http') ? home.url : `${REDFIN_BASE}${home.url}`) : null,
+                url: ensureAbsoluteUrl(home.url),
                 address: home.address || home.streetLine?.value || null,
                 city: home.city,
                 state: home.state,
@@ -234,7 +239,7 @@ const parseHtmlListPage = (html) => {
 
     cards.each((_, el) => {
         const $el = $(el);
-        const url = $el.find('a').attr('href');
+        const url = ensureAbsoluteUrl($el.find('a').attr('href'));
         const price = cleanText(
             $el.find('[data-rf-test-id="abp-price"], [data-rf-test-name="homecard-price"], .homecardV2Price').first().text()
         );
@@ -263,7 +268,7 @@ const parseHtmlListPage = (html) => {
         if (url || propertyId) {
             listings.push({
                 propertyId,
-                url: url ? (url.startsWith('http') ? url : `${REDFIN_BASE}${url}`) : null,
+                url,
                 address,
                 city,
                 state,
@@ -284,12 +289,68 @@ const parseHtmlListPage = (html) => {
     return listings;
 };
 
+const parseEmbeddedDetail = (html) => {
+    const patterns = [
+        /window\.__REDWOOD__\s*=\s*JSON\.parse\('(?<json>[^']+)'/s,
+        /window\.__REDWOOD__\s*=\s*(?<json>{[\s\S]*?})<\/script>/,
+        /window\.__PRELOADED_STATE__\s*=\s*(?<json>{[\s\S]*?})<\/script>/,
+        /window\.__INITIAL_STATE__\s*=\s*(?<json>{[\s\S]*?})<\/script>/,
+        /window\.__REDFIN_STATE__\s*=\s*(?<json>{[\s\S]*?})<\/script>/,
+    ];
+
+    for (const pattern of patterns) {
+        const match = html.match(pattern);
+        if (!match?.groups?.json) continue;
+        const rawJson = pattern.source.includes('JSON\\.parse') ? decodeJsonString(match.groups.json) : match.groups.json;
+        const parsed = safeJsonParse(rawJson);
+        if (!parsed) continue;
+
+        const home =
+            parsed?.homeInfo ||
+            parsed?.propertyDetailsInfo?.propertyInfo ||
+            parsed?.propertyInfo ||
+            parsed?.property ||
+            parsed?.payload?.homeDetail ||
+            parsed?.payload?.propertyInfo ||
+            parsed?.initialState?.homeInfo;
+
+        if (!home) continue;
+
+        return {
+            title: home.name || home.shortAddress || home.formattedAddress,
+            price: home.price || home.latestPrice || home.priceInfo?.amount,
+            beds: home.beds || home.bedrooms,
+            baths: home.baths || home.bathrooms,
+            sqft: home.sqFt || home.sqft || home.squareFeet,
+            address: home.streetLine || home.streetAddress || home.address?.streetAddress,
+            city: home.city || home.address?.city,
+            state: home.state || home.address?.state,
+            zip: home.zip || home.address?.zip,
+            description: home.description || home.publicRemarks || home.remarks,
+            latitude: home.latitude || home.latLong?.latitude || home.lat,
+            longitude: home.longitude || home.latLong?.longitude || home.lng,
+            lotSize: home.lotSize || home.lotSizeSqFt || home.lotSizeInSqFt || home.lotSize?.value,
+            yearBuilt: home.yearBuilt,
+            hoa: home.hoa || home.hoaFee || home.hoaDues,
+            status: home.status || home.mlsStatus || home.propertyStatus,
+            listingDate: home.listingDate || home.listedOnDate || home.listDate,
+            mlsNumber: home.mlsId || home.mlsNumber,
+            propertyType: home.propertyType,
+            id: home.id || home.propertyId,
+        };
+    }
+
+    return null;
+};
+
 const parseHtmlDetail = (html) => {
     const $ = cheerioLoad(html);
     const jsonLdArray = extractJsonLd(html);
-    const propertyData = parsePropertyFromJsonLd(jsonLdArray) || {};
+    const propertyData = parsePropertyFromJsonLd(jsonLdArray) || parseEmbeddedDetail(html) || {};
 
     const detailText = (selector) => cleanText($(selector).first().text());
+
+    const descriptionMeta = $('meta[name="description"]').attr('content');
 
     return {
         title: propertyData.title || detailText('h1') || detailText('[data-rf-test-id="abp-h1"]'),
@@ -303,21 +364,24 @@ const parseHtmlDetail = (html) => {
         zip: propertyData.zip,
         description:
             propertyData.description ||
+            cleanText(descriptionMeta) ||
             detailText('.remarks') ||
             detailText('[data-rf-test-id="abp-description"]') ||
             cleanText($('.propertyDescription').text()),
         latitude: propertyData.latitude,
         longitude: propertyData.longitude,
-        lotSize: detailText('[data-rf-test-id="lot-size"]'),
-        yearBuilt: detailText('[data-rf-test-id="year-built"]'),
-        hoa: detailText('[data-rf-test-id="hoa-dues"]'),
-        status: detailText('[data-rf-test-id="abp-status"]'),
+        lotSize: propertyData.lotSize || detailText('[data-rf-test-id="lot-size"]'),
+        yearBuilt: propertyData.yearBuilt || detailText('[data-rf-test-id="year-built"]'),
+        hoa: propertyData.hoa || detailText('[data-rf-test-id="hoa-dues"]'),
+        status: propertyData.status || detailText('[data-rf-test-id="abp-status"]'),
+        listingDate: propertyData.listingDate || detailText('[data-rf-test-id="listing-date"]'),
+        mlsNumber: propertyData.mlsNumber || detailText('[data-rf-test-id="mls-number"]'),
     };
 };
 
 const buildProperty = ({ listing = {}, detail = {}, source }) => {
     const propertyId = listing.propertyId || detail.id || listing.mlsNumber;
-    const url = listing.url || detail.url || (propertyId ? `${REDFIN_BASE}/home/${propertyId}` : null);
+    const url = ensureAbsoluteUrl(listing.url || detail.url) || (propertyId ? `${REDFIN_BASE}/home/${propertyId}` : null);
     const priceVal = detail.price || listing.price;
     const bedsVal = detail.beds || listing.beds;
     const bathsVal = detail.baths || listing.baths;
@@ -359,12 +423,12 @@ const buildProperty = ({ listing = {}, detail = {}, source }) => {
         sqft: normalizeNumber(sqftVal),
         propertyType: listing.propertyType || detail.propertyType || null,
         status: detail.status || listing.status || null,
-        listingDate: listing.listingDate || null,
+        listingDate: detail.listingDate || listing.listingDate || null,
         description: detail.description || null,
         latitude: detail.latitude || listing.latitude || null,
         longitude: detail.longitude || listing.longitude || null,
-        mlsNumber: listing.mlsNumber || null,
-        lotSize: listing.lotSize || detail.lotSize || null,
+        mlsNumber: detail.mlsNumber || listing.mlsNumber || null,
+        lotSize: detail.lotSize || listing.lotSize || null,
         yearBuilt: detail.yearBuilt || listing.yearBuilt || null,
         hoa: detail.hoa || listing.hoa || null,
         source,
@@ -455,7 +519,7 @@ const fetchSearchHtml = async ({ url, proxyConfiguration, timeoutMs, maxRetries 
 
 const fetchDetailPage = async ({ url, proxyConfiguration, timeoutMs, maxRetries }) => {
     try {
-        const html = await fetchSearchHtml({ url, proxyConfiguration, timeoutMs, maxRetries });
+        const html = await fetchSearchHtml({ url: ensureAbsoluteUrl(url), proxyConfiguration, timeoutMs, maxRetries });
         return parseHtmlDetail(html);
     } catch (err) {
         log.warning(`Detail fetch failed for ${url}: ${err.message}`);
@@ -528,36 +592,32 @@ try {
     const input = (await Actor.getInput()) || {};
     const {
         startUrl,
-        startUrls = [],
         regionId,
         regionType,
-        cityUrl,
         collectDetails = true,
         results_wanted: resultsWantedRaw = 50,
         max_pages: maxPagesRaw = 3,
         maxConcurrency = 3,
-        preferJson = true,
-        useHtmlFallback = true,
-        usePlaywright = false,
-        pageSize = 200,
-        maxRetries = 2,
-        requestTimeoutMs = DEFAULT_TIMEOUT_MS,
-        delayMinMs = 350,
-        delayMaxMs = 1200,
         proxyConfiguration,
     } = input;
+
+    const preferJson = input.preferJson ?? true; // internal default
+    const useHtmlFallback = input.useHtmlFallback ?? true;
+    const usePlaywright = input.usePlaywright ?? false;
+    const pageSize = input.pageSize ?? 200;
+    const maxRetries = input.maxRetries ?? 2;
+    const requestTimeoutMs = input.requestTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+    const delayMinMs = input.delayMinMs ?? 350;
+    const delayMaxMs = input.delayMaxMs ?? 1200;
 
     const resultsWanted = Math.max(1, Number.isFinite(+resultsWantedRaw) ? +resultsWantedRaw : 1);
     const maxPages = Math.max(1, Number.isFinite(+maxPagesRaw) ? +maxPagesRaw : 1);
     const proxyConf = proxyConfiguration ? await Actor.createProxyConfiguration({ ...proxyConfiguration }) : undefined;
 
-    const targetUrls = (startUrls && Array.isArray(startUrls) ? startUrls : []).filter(Boolean);
-    if (cityUrl) targetUrls.push(cityUrl);
-    if (startUrl) targetUrls.push(startUrl);
-    const uniqueTargetUrls = Array.from(new Set(targetUrls));
+    const uniqueTargetUrls = startUrl ? [startUrl] : [];
 
     if (!uniqueTargetUrls.length) {
-        throw new Error('Provide at least one startUrl or startUrls entry.');
+        throw new Error('Provide startUrl.');
     }
 
     const limiter = createLimiter(Math.max(1, Math.min(10, maxConcurrency)));

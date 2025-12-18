@@ -4,14 +4,6 @@
   "type": "object",
   "schemaVersion": 1,
   "properties": {
-    "startUrls": {
-      "title": "Start URLs (list)",
-      "type": "array",
-      "description": "List of Redfin search URLs (city/zip/neighborhood). Region ID is auto-extracted.",
-      "editor": "stringList",
-      "prefill": [],
-      "default": []
-    },
     "startUrl": {
       "title": "Primary Redfin URL",
       "type": "string",
@@ -20,12 +12,6 @@
       "example": "https://www.redfin.com/city/29470/IL/Chicago",
       "default": "https://www.redfin.com/city/29470/IL/Chicago",
       "prefill": "https://www.redfin.com/city/29470/IL/Chicago"
-    },
-    "cityUrl": {
-      "title": "City URL (alt input)",
-      "type": "string",
-      "description": "Optional alternate field for compatibility with older configs.",
-      "editor": "textfield"
     },
     "regionId": {
       "title": "Region ID (optional)",
@@ -50,30 +36,6 @@
       "default": true,
       "prefill": true
     },
-    "preferJson": {
-      "title": "Prefer JSON API (fast)",
-      "type": "boolean",
-      "description": "Use Redfin JSON API first. Turn off only if the API is blocked for your proxies.",
-      "editor": "checkbox",
-      "default": true,
-      "prefill": true
-    },
-    "useHtmlFallback": {
-      "title": "Use HTML Fallback",
-      "type": "boolean",
-      "description": "If JSON API fails or is blocked, scrape HTML with lightweight HTTP + Cheerio.",
-      "editor": "checkbox",
-      "default": true,
-      "prefill": true
-    },
-    "usePlaywright": {
-      "title": "Enable Playwright Fallback",
-      "type": "boolean",
-      "description": "Last-resort stealth browser fallback (slower, costlier). Only use when both JSON and HTML fail.",
-      "editor": "checkbox",
-      "default": false,
-      "prefill": false
-    },
     "results_wanted": {
       "title": "Maximum Properties to Extract",
       "type": "integer",
@@ -93,56 +55,6 @@
       "editor": "number",
       "default": 3,
       "prefill": 3
-    },
-    "pageSize": {
-      "title": "Page Size (API)",
-      "type": "integer",
-      "description": "How many homes to request per JSON API page (50-350). Higher = faster but riskier for blocks.",
-      "minimum": 10,
-      "maximum": 400,
-      "default": 200,
-      "prefill": 200,
-      "editor": "number"
-    },
-    "maxRetries": {
-      "title": "Max Retries per Request",
-      "type": "integer",
-      "description": "Number of retries with backoff for API/HTML requests.",
-      "minimum": 0,
-      "maximum": 5,
-      "default": 2,
-      "prefill": 2,
-      "editor": "number"
-    },
-    "requestTimeoutMs": {
-      "title": "Request Timeout (ms)",
-      "type": "integer",
-      "description": "Per-request timeout in milliseconds.",
-      "minimum": 5000,
-      "maximum": 60000,
-      "default": 35000,
-      "prefill": 35000,
-      "editor": "number"
-    },
-    "delayMinMs": {
-      "title": "Min Delay Between Requests (ms)",
-      "type": "integer",
-      "description": "Lower bound of random delay between detail requests to reduce blocks.",
-      "minimum": 0,
-      "maximum": 5000,
-      "default": 350,
-      "prefill": 350,
-      "editor": "number"
-    },
-    "delayMaxMs": {
-      "title": "Max Delay Between Requests (ms)",
-      "type": "integer",
-      "description": "Upper bound of random delay between detail requests to reduce blocks.",
-      "minimum": 0,
-      "maximum": 5000,
-      "default": 1200,
-      "prefill": 1200,
-      "editor": "number"
     },
     "maxConcurrency": {
       "title": "Max Concurrency",
