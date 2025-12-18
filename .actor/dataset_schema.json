@@ -1,0 +1,68 @@
+{
+  "actorSpecification": 1,
+  "fields": {},
+  "views": {
+    "overview": {
+      "title": "Overview",
+      "transformation": {
+        "fields": [
+          "address",
+          "city",
+          "state",
+          "price",
+          "beds",
+          "baths",
+          "sqft",
+          "propertyType",
+          "status",
+          "url"
+        ]
+      },
+      "display": {
+        "component": "table",
+        "properties": {
+          "address": {
+            "label": "Address",
+            "format": "text"
+          },
+          "city": {
+            "label": "City",
+            "format": "text"
+          },
+          "state": {
+            "label": "State",
+            "format": "text"
+          },
+          "price": {
+            "label": "Price",
+            "format": "text"
+          },
+          "beds": {
+            "label": "Beds",
+            "format": "text"
+          },
+          "baths": {
+            "label": "Baths",
+            "format": "text"
+          },
+          "sqft": {
+            "label": "Sq Ft",
+            "format": "text"
+          },
+          "propertyType": {
+            "label": "Type",
+            "format": "text"
+          },
+          "status": {
+            "label": "Status",
+            "format": "text"
+          },
+          "url": {
+            "label": "URL",
+            "format": "link"
+          }
+        }
+      }
+    }
+  }
+}

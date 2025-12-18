@@ -1,0 +1,81 @@
+{
+  "title": "Redfin Property Scraper - Stealthy Mode",
+  "description": "Extract real estate property listings from Redfin.com using multi-method approach (JSON API, Playwright, Sitemap, HTML). Fast, stealthy, and cost-effective.",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "startUrl": {
+      "title": "Redfin City URL",
+      "type": "string",
+      "description": "Full Redfin city page URL. Extract region ID automatically or provide manually.",
+      "editor": "textfield",
+      "example": "https://www.redfin.com/city/29470/IL/Chicago",
+      "default": "https://www.redfin.com/city/29470/IL/Chicago",
+      "prefill": "https://www.redfin.com/city/29470/IL/Chicago"
+    },
+    "regionId": {
+      "title": "Region ID",
+      "type": "string",
+      "description": "Redfin region ID (extracted from URL if not provided).",
+      "editor": "textfield",
+      "example": "29470"
+    },
+    "collectDetails": {
+      "title": "Collect Full Property Details",
+      "type": "boolean",
+      "description": "Visit each property detail page to extract complete descriptions, photos, and additional information.",
+      "editor": "checkbox",
+      "default": true,
+      "prefill": true
+    },
+    "results_wanted": {
+      "title": "Maximum Properties to Extract",
+      "type": "integer",
+      "description": "Maximum number of property listings to collect (1-1000).",
+      "minimum": 1,
+      "maximum": 1000,
+      "default": 50,
+      "prefill": 50,
+      "editor": "number"
+    },
+    "max_pages": {
+      "title": "Maximum Pages",
+      "type": "integer",
+      "description": "Maximum number of result pages to process.",
+      "minimum": 1,
+      "maximum": 20,
+      "editor": "number",
+      "default": 3,
+      "prefill": 3
+    },
+    "maxConcurrency": {
+      "title": "Max Concurrency",
+      "type": "integer",
+      "description": "Maximum concurrent requests (3-5 recommended to avoid blocking).",
+      "minimum": 1,
+      "maximum": 10,
+      "default": 3,
+      "prefill": 3,
+      "editor": "number"
+    },
+    "proxyConfiguration": {
+      "title": "Proxy Configuration",
+      "type": "object",
+      "description": "Required: Use Apify Proxy (residential recommended) to avoid blocking from Redfin.",
+      "editor": "proxy",
+      "default": {
+        "useApifyProxy": true,
+        "apifyProxyGroups": [
+          "RESIDENTIAL"
+        ]
+      },
+      "prefill": {
+        "useApifyProxy": true,
+        "apifyProxyGroups": [
+          "RESIDENTIAL"
+        ]
+      }
+    }
+  },
+  "required": []
+}

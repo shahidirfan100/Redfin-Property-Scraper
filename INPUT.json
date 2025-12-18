@@ -1,0 +1,14 @@
+{
+  "startUrl": "https://www.redfin.com/city/29470/IL/Chicago",
+  "regionId": "29470",
+  "results_wanted": 50,
+  "max_pages": 3,
+  "collectDetails": true,
+  "maxConcurrency": 3,
+  "proxyConfiguration": {
+    "useApifyProxy": true,
+    "apifyProxyGroups": [
+      "RESIDENTIAL"
+    ]
+  }
+}
